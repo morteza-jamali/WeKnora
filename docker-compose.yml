@@ -288,22 +288,22 @@ services:
 
   # 修改的PostgreSQL配置
   postgres:
-    image: paradedb/paradedb:v0.22.2-pg17
+    image: ghcr.io/morteza-jamali/paradedb_no-avx:v0.0.1
     container_name: WeKnora-postgres
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     networks:
       - WeKnora-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s # 增加时间间隔
       timeout: 10s # 增加超时时间
-      retries: 3 # 减少重试次数，让失败更快反馈
-      start_period: 30s # 给予初始启动更多时间
+      retries: 10 # 减少重试次数，让失败更快反馈
+      start_period: 60s # 给予初始启动更多时间
     restart: unless-stopped
     # 添加停机时的优雅退出时间
     stop_grace_period: 1m
@@ -566,30 +566,48 @@ services:
   # 一次性初始化脚本：在已有的 WeKnora-postgres 里创建 langfuse 数据库（幂等，数据库已存在则跳过）
   # 复用 WeKnora-postgres 的 ParadeDB 镜像，避免多拉一个 postgres 镜像
   langfuse-db-init:
-    image: paradedb/paradedb:v0.22.2-pg17
+    image: ghcr.io/morteza-jamali/paradedb_no-avx:v0.0.1
     container_name: WeKnora-langfuse-db-init
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      DB_USER: ${DB_USER}
       PGPASSWORD: ${DB_PASSWORD}
+      LANGFUSE_DB_NAME: ${LANGFUSE_DB_NAME:-langfuse}
     # ${LANGFUSE_DB_NAME:-langfuse} / ${DB_USER} 由 compose 解析成字面量后再传给 shell；
     # 脚本中需要 shell 自己展开的变量（无）一律用 $$ 转义。
-    entrypoint: ["sh", "-c"]
+    entrypoint: ["sh", "-ec"]
     command:
       - |
         set -e
-        echo "[langfuse-db-init] ensuring database '${LANGFUSE_DB_NAME:-langfuse}' exists in WeKnora-postgres..."
-        # 先刷新现有库的 collation（镜像 ICU 2.36 与宿主 2.41 不匹配时必须做），否则 CREATE DATABASE 会失败
-        psql -h postgres -U ${DB_USER} -d postgres -v ON_ERROR_STOP=0 -c "ALTER DATABASE template1 REFRESH COLLATION VERSION;" >/dev/null 2>&1 || true
-        psql -h postgres -U ${DB_USER} -d postgres -v ON_ERROR_STOP=0 -c "ALTER DATABASE postgres REFRESH COLLATION VERSION;" >/dev/null 2>&1 || true
-        # 幂等创建：已存在则跳过；不存在则从 template0 克隆（template0 永远不会有 collation 漂移）
-        if psql -h postgres -U ${DB_USER} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${LANGFUSE_DB_NAME:-langfuse}'" | grep -q 1; then
-          echo "[langfuse-db-init] database '${LANGFUSE_DB_NAME:-langfuse}' already exists, skipping."
+        echo "[langfuse-db-init] waiting for postgres..."
+
+        until pg_isready -h postgres -p 5432 -U "$$DB_USER"; do
+          sleep 2
+        done
+
+        until psql -h postgres -U "$$DB_USER" -d postgres -tAc "SELECT 1" >/dev/null 2>&1; do
+          echo "[langfuse-db-init] postgres not ready for SQL yet..."
+          sleep 2
+        done
+
+        echo "[langfuse-db-init] ensuring database '$$LANGFUSE_DB_NAME' exists..."
+
+        psql -h postgres -U "$$DB_USER" -d postgres -v ON_ERROR_STOP=0 \
+          -c "ALTER DATABASE template1 REFRESH COLLATION VERSION;" >/dev/null 2>&1 || true
+
+        psql -h postgres -U "$$DB_USER" -d postgres -v ON_ERROR_STOP=0 \
+          -c "ALTER DATABASE postgres REFRESH COLLATION VERSION;" >/dev/null 2>&1 || true
+
+        if psql -h postgres -U "$$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$LANGFUSE_DB_NAME'" | grep -q 1; then
+          echo "[langfuse-db-init] database '$$LANGFUSE_DB_NAME' already exists, skipping."
         else
-          psql -h postgres -U ${DB_USER} -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${LANGFUSE_DB_NAME:-langfuse}\" TEMPLATE template0;"
-          echo "[langfuse-db-init] database '${LANGFUSE_DB_NAME:-langfuse}' created."
+          psql -h postgres -U "$$DB_USER" -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE \"$$LANGFUSE_DB_NAME\" TEMPLATE template0;"
+          echo "[langfuse-db-init] database '$$LANGFUSE_DB_NAME' created."
         fi
+
         echo "[langfuse-db-init] done."
     networks:
       - WeKnora-network
