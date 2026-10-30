@@ -80,7 +80,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-}
       - DB_NAME=${DB_NAME:-}
       - TZ=${TZ:-Asia/Shanghai}
-      - WEKNORA_LANGUAGE=${WEKNORA_LANGUAGE:-zh-CN}
+      - WEKNORA_LANGUAGE=${WEKNORA_LANGUAGE:-en-US}
       # ========== Langfuse (optional observability) ==========
       # Enabled automatically when LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set.
       # See docs/Langfuse集成.md for the full list of tuning knobs.
@@ -144,7 +144,7 @@ services:
       - OBS_BUCKET_NAME=${OBS_BUCKET_NAME:-}
       - OBS_PATH_PREFIX=${OBS_PATH_PREFIX:-}
       - OBS_PROXY_DOMAIN=${OBS_PROXY_DOMAIN:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:4000}
       - STREAM_MANAGER_TYPE=${STREAM_MANAGER_TYPE:-}
       - REDIS_ADDR=redis:6379
       - REDIS_USERNAME=${REDIS_USERNAME:-}
@@ -821,3 +821,4 @@ volumes:
   langfuse_clickhouse_logs:
   langfuse_minio_data:
   searxng_config:
+

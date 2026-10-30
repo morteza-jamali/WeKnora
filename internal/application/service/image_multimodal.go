@@ -47,7 +47,7 @@ const (
 		"5. Output ONLY the extracted text content. Do NOT include any HTML tags, reasoning, or unrelated comments.\n" +
 		"6. If there is absolutely no recognizable text content in the image, reply ONLY with: No text content.\n" +
 		"</instructions>"
-	vlmCaptionPrompt = "Provide a brief and concise description of the main content of the image in Chinese"
+	vlmCaptionPrompt = "Provide a brief and concise description of the main content of the image in English"
 )
 
 // ImageMultimodalService handles image:multimodal asynq tasks.
